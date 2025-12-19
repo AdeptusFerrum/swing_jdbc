@@ -1,0 +1,40 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  # Основное приложение
+  crud-app:
+    build: .
+    container_name: crud-application
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./crud_app.db:/app/crud_app.db
+      - ./reports:/app/reports
+    environment:
+      - DB_PATH=/app/crud_app.db
+      - JAVA_OPTS=-Xmx512m
+    restart: unless-stopped
+
+  # SonarQube для анализа кода (используем встроенную H2 для простоты)
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+      # Используем встроенную H2 БД для демо (для прода лучше Postgres)
+      - SONAR_JDBC_URL=jdbc:h2:tcp://localhost:9092/sonar
+      - SONAR_JDBC_USERNAME=sonar
+      - SONAR_JDBC_PASSWORD=sonar
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    restart: unless-stopped
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
