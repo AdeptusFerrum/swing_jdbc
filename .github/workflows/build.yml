@@ -18,8 +18,8 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Build, Test, Coverage(skip tests)
-        run: mvn clean test jacoco:report -DskipTests
+      - name: Build, Test, Coverage
+        run: mvn clean test jacoco:report || true
 
       - name: Install tools
         run: sudo apt-get update && sudo apt-get install -y jq libxml2-utils
@@ -30,6 +30,7 @@ jobs:
           cp target/site/jacoco/jacoco.xml devsecops-reporter/reports/
 
       - name: Run DevSecOps Reporter
+        if: always()
         run: |
           cd devsecops-reporter
           chmod +x *.sh parsers/*.sh
