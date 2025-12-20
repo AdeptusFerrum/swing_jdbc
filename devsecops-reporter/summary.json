@@ -1,0 +1,14 @@
+[
+  {
+    "tool": "SpotBugs",
+    "type": "SAST",
+    "issues": 0,
+    "status": "PASS"
+  },
+  {
+    "tool": "JaCoCo",
+    "type": "COVERAGE",
+    "coverage": 70,
+    "status": "PASS"
+  }
+]
