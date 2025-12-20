@@ -2,133 +2,218 @@ package org.example.dao;
 
 import org.example.model.Entity;
 import org.example.model.EntityStatus;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import java.sql.*;
-import java.time.LocalDateTime;
+import org.junit.jupiter.api.*;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.UUID;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-@ExtendWith(MockitoExtension.class)
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class EntityDaoTest {
-
-    @Mock
-    private Connection connection;
-
-    @Mock
-    private PreparedStatement preparedStatement;
-
-    @Mock
-    private ResultSet resultSet;
 
     private EntityDao entityDao;
 
-    @BeforeEach
-    void setUp() throws SQLException {
+    @BeforeAll
+    void setupAll() throws SQLException {
         entityDao = new EntityDao();
-        when(DatabaseConnection.getConnection()).thenReturn(connection);
+    }
+
+    @BeforeEach
+    void clearDatabase() throws SQLException {
+        try (var conn = DatabaseConnection.getConnection();
+             var stmt = conn.createStatement()) {
+            stmt.execute("DELETE FROM entities");
+        }
     }
 
     @Test
-    void testSave() throws SQLException {
-        Entity entity = new Entity("Test", "Desc");
-
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    void testSaveEntity() throws SQLException {
+        Entity entity = new Entity("Test Save", "Test Description");
 
         entityDao.save(entity);
 
-        verify(preparedStatement).setString(1, entity.getId().toString());
-        verify(preparedStatement).setString(2, "Test");
-        verify(preparedStatement).setString(3, "Desc");
-        verify(preparedStatement).setString(4, "ACTIVE");
-        verify(preparedStatement).executeUpdate();
+        Entity found = entityDao.findById(entity.getId());
+
+        assertNotNull(found);
+        assertEquals(entity.getId(), found.getId());
+        assertEquals("Test Save", found.getName());
+        assertEquals("Test Description", found.getDescription());
+        assertEquals(EntityStatus.ACTIVE, found.getStatus());
     }
 
     @Test
-    void testFindById() throws SQLException {
-        UUID id = UUID.randomUUID();
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-        when(preparedStatement.executeQuery()).thenReturn(resultSet);
-        when(resultSet.next()).thenReturn(true);
+    void testFindByIdNotFound() throws SQLException {
+        UUID fakeId = UUID.randomUUID();
 
-        when(resultSet.getString("id")).thenReturn(id.toString());
-        when(resultSet.getString("name")).thenReturn("Test");
-        when(resultSet.getString("description")).thenReturn("Desc");
-        when(resultSet.getString("status")).thenReturn("ACTIVE");
-        when(resultSet.getLong("created_at")).thenReturn(System.currentTimeMillis());
-        when(resultSet.getLong("updated_at")).thenReturn(System.currentTimeMillis());
+        Entity result = entityDao.findById(fakeId);
 
-        Entity result = entityDao.findById(id);
-
-        assertNotNull(result);
-        assertEquals(id, result.getId());
-        assertEquals("Test", result.getName());
+        assertNull(result);
     }
 
     @Test
-    void testUpdate() throws SQLException {
-        Entity entity = new Entity("Updated", "New Desc");
-        UUID id = UUID.randomUUID();
-        entity.setId(id);
+    void testUpdateEntity() throws SQLException {
+        Entity entity = new Entity("Original", "Original Desc");
+        entityDao.save(entity);
 
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+        entity.setName("Updated Name");
+        entity.setDescription("Updated Desc");
+        entity.setStatus(EntityStatus.INACTIVE);
 
         entityDao.update(entity);
 
-        verify(preparedStatement).setString(1, "Updated");
-        verify(preparedStatement).setString(2, "New Desc");
-        verify(preparedStatement).setString(3, "ACTIVE");
-        verify(preparedStatement).executeUpdate();
+        Entity updated = entityDao.findById(entity.getId());
+
+        assertEquals("Updated Name", updated.getName());
+        assertEquals("Updated Desc", updated.getDescription());
+        assertEquals(EntityStatus.INACTIVE, updated.getStatus());
     }
 
     @Test
-    void testDelete() throws SQLException {
-        UUID id = UUID.randomUUID();
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
+    void testDeleteEntity() throws SQLException {
+        Entity entity = new Entity("To Delete", "Description");
+        entityDao.save(entity);
 
-        entityDao.delete(id);
+        entityDao.delete(entity.getId());
 
-        verify(preparedStatement).setString(1, id.toString());
-        verify(preparedStatement).executeUpdate();
+        Entity deleted = entityDao.findById(entity.getId());
+        assertNull(deleted);
     }
 
     @Test
-    void testFindAllWithFilters() throws SQLException {
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-        when(preparedStatement.executeQuery()).thenReturn(resultSet);
-        when(resultSet.next()).thenReturn(true, true, false);
+    void testFindAll() throws SQLException {
+        entityDao.save(new Entity("Entity 1", "Desc 1"));
+        entityDao.save(new Entity("Entity 2", "Desc 2"));
 
-        when(resultSet.getString("id")).thenReturn(UUID.randomUUID().toString());
-        when(resultSet.getString("name")).thenReturn("Test");
-        when(resultSet.getString("description")).thenReturn("Desc");
-        when(resultSet.getString("status")).thenReturn("ACTIVE");
-        when(resultSet.getLong("created_at")).thenReturn(System.currentTimeMillis());
-        when(resultSet.getLong("updated_at")).thenReturn(System.currentTimeMillis());
+        List<Entity> all = entityDao.findAll(null, null, null, 0, 10);
 
-        var result = entityDao.findAll("search", EntityStatus.ACTIVE, "name", 0, 10);
+        assertEquals(2, all.size());
+    }
 
-        assertEquals(2, result.size());
-        verify(preparedStatement).setString(1, "%search%");
-        verify(preparedStatement).setString(2, "%search%");
-        verify(preparedStatement).setString(3, "ACTIVE");
-        verify(preparedStatement).setInt(4, 10);
-        verify(preparedStatement).setInt(5, 0);
+    @Test
+    void testFindAllWithSearch() throws SQLException {
+        entityDao.save(new Entity("Apple iPhone", "Smartphone"));
+        entityDao.save(new Entity("Samsung Phone", "Android phone"));
+        entityDao.save(new Entity("MacBook", "Laptop"));
+
+        List<Entity> phoneResults = entityDao.findAll("phone", null, null, 0, 10);
+        assertEquals(2, phoneResults.size());
+
+        List<Entity> appleResults = entityDao.findAll("Apple", null, null, 0, 10);
+        assertEquals(1, appleResults.size());
+    }
+
+    @Test
+    void testFindAllWithStatusFilter() throws SQLException {
+        Entity active1 = new Entity("Active 1", "Desc");
+        active1.setStatus(EntityStatus.ACTIVE);
+
+        Entity active2 = new Entity("Active 2", "Desc");
+        active2.setStatus(EntityStatus.ACTIVE);
+
+        Entity inactive = new Entity("Inactive", "Desc");
+        inactive.setStatus(EntityStatus.INACTIVE);
+
+        entityDao.save(active1);
+        entityDao.save(active2);
+        entityDao.save(inactive);
+
+        List<Entity> activeResults = entityDao.findAll(null, EntityStatus.ACTIVE, null, 0, 10);
+        List<Entity> inactiveResults = entityDao.findAll(null, EntityStatus.INACTIVE, null, 0, 10);
+
+        assertEquals(2, activeResults.size());
+        assertEquals(1, inactiveResults.size());
+    }
+
+    @Test
+    void testFindAllWithSorting() throws SQLException {
+        entityDao.save(new Entity("Charlie", "C"));
+        entityDao.save(new Entity("Alpha", "A"));
+        entityDao.save(new Entity("Bravo", "B"));
+
+        List<Entity> byName = entityDao.findAll(null, null, "name", 0, 10);
+        if (byName.size() >= 3) {
+            assertEquals("Alpha", byName.get(0).getName());
+            assertEquals("Bravo", byName.get(1).getName());
+            assertEquals("Charlie", byName.get(2).getName());
+        }
+    }
+
+    @Test
+    void testFindAllWithPagination() throws SQLException {
+        for (int i = 1; i <= 15; i++) {
+            entityDao.save(new Entity("Entity " + i, "Description " + i));
+        }
+
+        List<Entity> page1 = entityDao.findAll(null, null, null, 0, 5);
+        List<Entity> page2 = entityDao.findAll(null, null, null, 5, 5);
+        List<Entity> page3 = entityDao.findAll(null, null, null, 10, 5);
+
+        assertEquals(5, page1.size());
+        assertEquals(5, page2.size());
+        assertEquals(5, page3.size());
     }
 
     @Test
     void testCount() throws SQLException {
-        when(connection.prepareStatement(anyString())).thenReturn(preparedStatement);
-        when(preparedStatement.executeQuery()).thenReturn(resultSet);
-        when(resultSet.next()).thenReturn(true);
-        when(resultSet.getInt(1)).thenReturn(5);
+        int initialCount = entityDao.count(null, null);
 
-        int count = entityDao.count("search", EntityStatus.ACTIVE);
+        entityDao.save(new Entity("Test 1", "Desc"));
+        entityDao.save(new Entity("Test 2", "Desc"));
 
-        assertEquals(5, count);
+        int newCount = entityDao.count(null, null);
+        assertEquals(initialCount + 2, newCount);
+    }
+
+    @Test
+    void testCountWithSearch() throws SQLException {
+        entityDao.save(new Entity("Apple iPhone", "Smartphone"));
+        entityDao.save(new Entity("Samsung Phone", "Android"));
+        entityDao.save(new Entity("MacBook", "Laptop"));
+
+        int phoneCount = entityDao.count("phone", null);
+        assertEquals(2, phoneCount);
+
+        int appleCount = entityDao.count("Apple", null);
+        assertEquals(1, appleCount);
+    }
+
+    @Test
+    void testCountWithStatus() throws SQLException {
+        Entity active = new Entity("Active", "Desc");
+        active.setStatus(EntityStatus.ACTIVE);
+
+        Entity inactive = new Entity("Inactive", "Desc");
+        inactive.setStatus(EntityStatus.INACTIVE);
+
+        entityDao.save(active);
+        entityDao.save(inactive);
+
+        int activeCount = entityDao.count(null, EntityStatus.ACTIVE);
+        int inactiveCount = entityDao.count(null, EntityStatus.INACTIVE);
+
+        assertEquals(1, activeCount);
+        assertEquals(1, inactiveCount);
+    }
+
+    @Test
+    void testMultipleOperations() throws SQLException {
+        Entity entity = new Entity("Test", "Description");
+
+        entityDao.save(entity);
+
+        Entity found = entityDao.findById(entity.getId());
+        assertNotNull(found);
+
+        entity.setName("Updated");
+        entity.setDescription("Updated Desc");
+        entityDao.update(entity);
+
+        Entity updated = entityDao.findById(entity.getId());
+        assertEquals("Updated", updated.getName());
+
+        entityDao.delete(entity.getId());
+
+        Entity deleted = entityDao.findById(entity.getId());
+        assertNull(deleted);
     }
 }

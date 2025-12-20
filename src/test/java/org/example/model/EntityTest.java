@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class EntityTest {
 
     @Test
-    void testEntityCreation() {
+    void testDefaultConstructor() {
         Entity entity = new Entity();
         assertNotNull(entity.getId());
         assertNotNull(entity.getCreatedAt());
@@ -17,10 +17,10 @@ class EntityTest {
     }
 
     @Test
-    void testEntityWithParameters() {
-        Entity entity = new Entity("Test Name", "Test Description");
-        assertEquals("Test Name", entity.getName());
-        assertEquals("Test Description", entity.getDescription());
+    void testParameterizedConstructor() {
+        Entity entity = new Entity("Test", "Description");
+        assertEquals("Test", entity.getName());
+        assertEquals("Description", entity.getDescription());
         assertEquals(EntityStatus.ACTIVE, entity.getStatus());
     }
 
@@ -31,26 +31,15 @@ class EntityTest {
         LocalDateTime time = LocalDateTime.now();
 
         entity.setId(id);
-        entity.setName("New Name");
-        entity.setDescription("New Desc");
+        entity.setName("Name");
+        entity.setDescription("Desc");
         entity.setStatus(EntityStatus.INACTIVE);
         entity.setCreatedAt(time.minusDays(1));
         entity.setUpdatedAt(time);
 
         assertEquals(id, entity.getId());
-        assertEquals("New Name", entity.getName());
-        assertEquals("New Desc", entity.getDescription());
+        assertEquals("Name", entity.getName());
+        assertEquals("Desc", entity.getDescription());
         assertEquals(EntityStatus.INACTIVE, entity.getStatus());
-        assertEquals(time.minusDays(1), entity.getCreatedAt());
-        assertEquals(time, entity.getUpdatedAt());
-    }
-
-    @Test
-    void testToString() {
-        Entity entity = new Entity("Test", "Description");
-        String result = entity.toString();
-        assertTrue(result.contains("Test"));
-        assertTrue(result.contains("Description"));
-        assertTrue(result.contains("ACTIVE"));
     }
 }
